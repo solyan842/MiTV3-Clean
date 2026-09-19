@@ -22,7 +22,7 @@
                 <TextBlock Text="Audit · Debloat · Restore · Couchy Launcher" Foreground="#AAA" FontSize="14"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#1C1C1C" CornerRadius="10" Padding="12,8">
-                <TextBlock Text="v0.1.5 · SolYan" Foreground="#FF9B42"/>
+                <TextBlock Text="v0.1.6 · SolYan" Foreground="#FF9B42"/>
             </Border>
         </Grid>
 
@@ -89,7 +89,7 @@
                         <Button Content="Khôi phục HOME Xiaomi" Click="RestoreXiaomiHome_Click"/>
                         <Button Content="Chẩn đoán HOME" Click="DiagnoseHome_Click"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#999" Margin="5"
-                                   Text="v0.1.4: ưu tiên chuyển HOME không phá hệ thống. Chế độ mạnh chỉ chạy sau khi backup APK TVHome về PC và có rollback tự động."/>
+                                   Text="v0.1.6: ưu tiên chuyển HOME không phá hệ thống. Chế độ mạnh chỉ chạy sau khi backup APK TVHome về PC và có rollback tự động."/>
                     </StackPanel>
                 </Border>
 
