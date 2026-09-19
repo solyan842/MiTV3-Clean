@@ -22,7 +22,7 @@
                 <TextBlock Text="Audit · Debloat · Restore · Couchy Launcher" Foreground="#AAA" FontSize="14"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#1C1C1C" CornerRadius="10" Padding="12,8">
-                <TextBlock Text="v0.1.4 · SolYan" Foreground="#FF9B42"/>
+                <TextBlock Text="v0.1.5 · SolYan" Foreground="#FF9B42"/>
             </Border>
         </Grid>
 
