@@ -22,7 +22,7 @@
                 <TextBlock Text="Audit · Debloat · Restore · Couchy Launcher" Foreground="#AAA" FontSize="14"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#1C1C1C" CornerRadius="10" Padding="12,8">
-                <TextBlock Text="v0.1.1 · SolYan" Foreground="#FF9B42"/>
+                <TextBlock Text="v0.1.2 · SolYan" Foreground="#FF9B42"/>
             </Border>
         </Grid>
 
@@ -87,7 +87,7 @@
                         <Button Content="Đặt Couchy làm HOME" Click="SetCouchyHome_Click"/>
                         <Button Content="Chẩn đoán HOME" Click="DiagnoseHome_Click"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#999" Margin="5"
-                                   Text="MiTV3 firmware cũ không có lệnh cmd. Chẩn đoán HOME sẽ tự nhận diện launcher hiện tại và HOME candidates."/>
+                                   Text="v0.1.2 đọc HOME thật bằng KEYCODE_HOME + window/activity focus, phù hợp Android 5.1.1 của MiTV3."/>
                     </StackPanel>
                 </Border>
 
