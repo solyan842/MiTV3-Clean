@@ -19,6 +19,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = this;
         _progress = new Progress<string>(Log);
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown";
+        Log($"MiTV3 Clean v{version} · build xác nhận theo EXE đang chạy.");
     }
 
     private void Log(string message)
