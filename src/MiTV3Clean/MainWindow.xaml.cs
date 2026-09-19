@@ -128,6 +128,9 @@ public partial class MainWindow : Window
     private async void SetCouchyHome_Click(object sender, RoutedEventArgs e)
         => await GuardAsync(async () => Log(await _couchy.SetHomeAsync(_adb)));
 
+    private async void DiagnoseHome_Click(object sender, RoutedEventArgs e)
+        => await GuardAsync(async () => Log(await _couchy.DiagnoseHomeAsync(_adb)));
+
     private async Task ApplySelectedAsync(Func<PackageEntry, Task<string>> action, string title)
     {
         await GuardAsync(async () =>
