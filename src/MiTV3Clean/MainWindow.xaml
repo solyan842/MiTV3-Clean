@@ -22,7 +22,7 @@
                 <TextBlock Text="Audit · Debloat · Restore · Couchy Launcher" Foreground="#AAA" FontSize="14"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#1C1C1C" CornerRadius="10" Padding="12,8">
-                <TextBlock Text="v0.1.3 · SolYan" Foreground="#FF9B42"/>
+                <TextBlock Text="v0.1.4 · SolYan" Foreground="#FF9B42"/>
             </Border>
         </Grid>
 
@@ -85,10 +85,11 @@
                         <TextBlock Text="COUCHY LAUNCHER" FontWeight="SemiBold" Foreground="#FF9B42"/>
                         <Button Content="Tải + cài Couchy" Click="InstallCouchy_Click"/>
                         <Button Content="Chuyển HOME sang Couchy" Click="SetCouchyHome_Click"/>
+                        <Button Content="Chuyển mạnh: backup + uninstall TVHome" Click="ForceSwitchHome_Click"/>
                         <Button Content="Khôi phục HOME Xiaomi" Click="RestoreXiaomiHome_Click"/>
                         <Button Content="Chẩn đoán HOME" Click="DiagnoseHome_Click"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#999" Margin="5"
-                                   Text="v0.1.3: Android 5.1 dùng legacy switch có rollback. Chỉ disable activity HOME Xiaomi, không disable cả package."/>
+                                   Text="v0.1.4: ưu tiên chuyển HOME không phá hệ thống. Chế độ mạnh chỉ chạy sau khi backup APK TVHome về PC và có rollback tự động."/>
                     </StackPanel>
                 </Border>
 
