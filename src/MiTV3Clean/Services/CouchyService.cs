@@ -237,6 +237,118 @@ public sealed class CouchyService
                string.Join("\n", report);
     }
 
+    public async Task<string> SwitchHomeByUninstallUser0Async(AdbService adb, IProgress<string>? progress = null)
+    {
+        var report = new List<string>();
+
+        var couchyInstalled = await SafeShellAsync(adb, $"pm list packages {Package}");
+        if (!couchyInstalled.Contains(Package, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
+
+        var explicitHome = await SafeShellAsync(
+            adb,
+            $"am start -W -a android.intent.action.MAIN -c android.intent.category.HOME -p {Package}");
+        report.Add("Kiểm tra Couchy nhận HOME: " + explicitHome);
+
+        if (LooksLikeShellFailure(explicitHome) ||
+            explicitHome.Contains("unable to resolve", StringComparison.OrdinalIgnoreCase) ||
+            explicitHome.Contains("no activities", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DỪNG AN TOÀN: Couchy chưa resolve được intent HOME. Không gỡ TVHome.\n" +
+                   string.Join("\n", report);
+        }
+
+        await SafeShellAsync(adb, "input keyevent 3");
+        await Task.Delay(700);
+        var before = await DetectCurrentHomeComponentAsync(adb);
+        report.Add("HOME trước khi chuyển: " + before);
+
+        if (!before.StartsWith(XiaomiHomePackage + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DỪNG AN TOÀN: HOME hiện tại không phải com.mitv.tvhome. Không thực hiện uninstall user 0.\n" +
+                   string.Join("\n", report);
+        }
+
+        var pathOutput = await SafeShellAsync(adb, $"pm path {XiaomiHomePackage}");
+        var apkPath = pathOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .FirstOrDefault(x => x.StartsWith("package:", StringComparison.OrdinalIgnoreCase));
+
+        if (apkPath is null)
+            return "DỪNG AN TOÀN: không lấy được đường dẫn APK gốc của Xiaomi TVHome.\n" + string.Join("\n", report);
+
+        apkPath = apkPath["package:".Length..].Trim();
+        report.Add("APK hệ thống TVHome: " + apkPath);
+
+        var backupDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MiTV3Clean", "backup");
+        Directory.CreateDirectory(backupDir);
+        var backupApk = Path.Combine(backupDir, $"com.mitv.tvhome-{DateTime.Now:yyyyMMdd-HHmmss}.apk");
+
+        progress?.Report("Đang sao lưu APK Xiaomi TVHome về máy tính...");
+        var pull = await adb.RunDeviceAsync($"pull \"{apkPath}\" \"{backupApk}\"");
+        report.Add("Backup TVHome: " + pull);
+
+        if (!File.Exists(backupApk) || new FileInfo(backupApk).Length < 1024)
+        {
+            return "DỪNG AN TOÀN: backup APK TVHome thất bại hoặc file không hợp lệ. Không uninstall.\n" +
+                   string.Join("\n", report);
+        }
+
+        var backupMeta = Path.ChangeExtension(backupApk, ".txt");
+        await File.WriteAllTextAsync(
+            backupMeta,
+            $"Package={XiaomiHomePackage}\nComponent={XiaomiHomeComponent}\nDeviceApkPath={apkPath}\nBackupApk={backupApk}\nCreated={DateTime.Now:O}\n");
+
+        progress?.Report("Backup hoàn tất. Đang gỡ TVHome khỏi user 0...");
+        var uninstall = await SafeShellAsync(adb, $"pm uninstall -k --user 0 {XiaomiHomePackage}");
+        report.Add("Uninstall user 0 TVHome: " + uninstall);
+
+        if (!uninstall.Contains("Success", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Firmware không cho uninstall TVHome khỏi user 0. TV không bị thay đổi.\n" +
+                   "Backup APK đã được lưu tại: " + backupApk + "\n" +
+                   string.Join("\n", report);
+        }
+
+        await SafeShellAsync(adb, $"am start -W -a android.intent.action.MAIN -c android.intent.category.HOME -p {Package}");
+        await SafeShellAsync(adb, "input keyevent 3");
+        await Task.Delay(1200);
+
+        var after = await DetectCurrentHomeComponentAsync(adb);
+        report.Add("HOME sau uninstall user 0: " + after);
+
+        if (after.Contains(Package, StringComparison.OrdinalIgnoreCase))
+        {
+            return "CHUYỂN HOME THÀNH CÔNG: Couchy đang nhận phím HOME.\n" +
+                   "TVHome chỉ bị gỡ khỏi user 0; APK hệ thống đã được backup trên PC tại:\n" + backupApk + "\n" +
+                   string.Join("\n", report);
+        }
+
+        progress?.Report("Couchy chưa thành HOME. Đang rollback TVHome từ APK backup...");
+        var reinstall = await adb.RunDeviceAsync($"install -r -d \"{backupApk}\"");
+        report.Add("Rollback adb install TVHome: " + reinstall);
+
+        await SafeShellAsync(adb, $"am start -W -n {XiaomiHomeComponent}");
+        await SafeShellAsync(adb, "input keyevent 3");
+        await Task.Delay(1000);
+
+        var restored = await DetectCurrentHomeComponentAsync(adb);
+        report.Add("HOME sau rollback: " + restored);
+
+        if (restored.StartsWith(XiaomiHomePackage + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "CHUYỂN HOME KHÔNG THÀNH CÔNG - ĐÃ ROLLBACK TVHOME THÀNH CÔNG.\n" +
+                   "Backup vẫn được giữ tại: " + backupApk + "\n" +
+                   string.Join("\n", report);
+        }
+
+        return "CẢNH BÁO: uninstall user 0 đã chạy nhưng rollback tự động chưa xác nhận TVHome trở lại.\n" +
+               "KHÔNG reboot TV. Giữ ADB kết nối và dùng file backup sau để phục hồi thủ công:\n" + backupApk + "\n" +
+               string.Join("\n", report);
+    }
+
     public async Task<string> RestoreXiaomiHomeAsync(AdbService adb)
     {
         var report = new List<string>();
