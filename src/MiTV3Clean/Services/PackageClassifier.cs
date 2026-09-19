@@ -17,7 +17,8 @@ public static class PackageClassifier
         "com.android.bluetooth",
         "com.android.networkstack",
         "com.google.android.webview",
-        "com.android.webview"
+        "com.android.webview",
+        "com.mitv.videoplayer"
     };
 
     private static readonly string[] ProtectedContains =
@@ -28,14 +29,76 @@ public static class PackageClassifier
         "tvinput", "hdmi", "cec", "remote", "audio", "surfaceflinger"
     };
 
-    // Conservative list: these are merely candidates for review/disable.
-    private static readonly string[] ChinaCandidateTokens =
+    // High-confidence MiTV/MIUI China bloat candidates.
+    // The app still uses Disable-first; these are not deleted automatically.
+    private static readonly HashSet<string> SafeCandidateExact = new(StringComparer.OrdinalIgnoreCase)
     {
-        "mitv.advert", "mitv.analytics", "mitv.stat", "mitv.shop",
-        "mitv.payment", "mitv.mishop", "mitv.user", "mitv.account",
-        "duokan", "xiaomi.market", "xiaomi.game", "xiaomi.mipicks",
-        "miui.analytics", "miui.systemAdSolution", "miui.msa",
-        "xiaomi.jr", "xiaomi.vip", "xiaomi.smarthome"
+        // Ads / telemetry / statistics
+        "com.xiaomi.mitv.advertise",
+        "com.miui.systemAdSolution",
+        "com.miui.analytics",
+        "com.miui.tv.analytics",
+        "com.xiaomi.statistic",
+        "com.xiaomi.mitv.osstatistic",
+        "mitv.service",
+
+        // Store / commerce / payment
+        "com.xiaomi.mitv.shop",
+        "com.xiaomi.mitv.payment",
+        "com.xiaomi.mitv.pay",
+        "com.mipay.wallet.tv",
+        "com.xiaomi.mitv.appstore",
+        "com.mitv.appstore.component.land",
+
+        // Games
+        "com.xiaomi.mibox.gamecenter",
+        "com.xiaomi.gamecenter.sdk.service.mibox",
+
+        // China content / recommendations
+        "com.duokan.videodaily",
+        "com.xm.webcontent",
+        "com.xiaomi.tv.gallery",
+        "com.mitv.gallery",
+
+        // Optional Xiaomi ecosystem services
+        "com.xiaomi.smarthome.tv",
+        "com.xiaomi.mitv.handbook",
+        "com.xiaomi.mitv.calendar",
+        "com.xiaomi.tweather",
+        "com.xiaomi.mimusic2",
+        "com.xiaomi.mitv.karaoke.service",
+        "com.xiaomi.mitv.tvpush.tvpushservice",
+        "com.xiaomi.screenrecorder",
+        "com.miui.screenrecorder",
+        "com.sogou.speech.offlineservice"
+    };
+
+    // Additional token matches for variants seen across MiTV firmwares.
+    private static readonly string[] SafeCandidateTokens =
+    {
+        ".advertise", ".advert", ".analytics", ".statistic", ".osstatistic",
+        ".videodaily", ".gamecenter", ".payment", ".wallet.tv",
+        ".mitv.shop", ".mitv.handbook", ".mitv.calendar",
+        ".tvpush.tvpushservice", ".smarthome.tv", ".karaoke.service",
+        "systemadsolution"
+    };
+
+    // These may be removable depending on the user's setup, but should not be
+    // auto-selected because they can affect casting, updates, account login, etc.
+    private static readonly HashSet<string> ReviewExact = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "com.xiaomi.account",
+        "com.xiaomi.account.auth",
+        "com.xiaomi.mitv.upgrade",
+        "com.xiaomi.tv.appupgrade",
+        "com.xiaomi.mitv.tvmanager",
+        "com.duokan.airkan.tvbox",
+        "com.mitv.milinkservice",
+        "com.xiaomi.miplay",
+        "com.droidlogic",
+        "com.mitv.tvhome",
+        "com.mitv.tvhome.michannel",
+        "com.mi.umifrontend"
     };
 
     public static PackageEntry Classify(string package, string path, bool isSystem, bool disabled)
@@ -55,17 +118,27 @@ public static class PackageClassifier
                 "APP NGƯỜI DÙNG", "Ứng dụng cài thêm; không tự động coi là rác.");
         }
 
-        if (ChinaCandidateTokens.Any(x => lower.Contains(x.ToLowerInvariant())))
+        if (SafeCandidateExact.Contains(package) ||
+            SafeCandidateTokens.Any(x => lower.Contains(x.ToLowerInvariant())))
         {
             return New(package, path, true, disabled, PackageRisk.SafeCandidate,
-                "ỨNG VIÊN DỌN", "Khớp nhóm quảng cáo/analytics/market/dịch vụ nội địa. Nên Disable thử trước.");
+                "ỨNG VIÊN DỌN",
+                "Khớp danh sách MiTV/MIUI nội địa thường được debloat. MiTV3 Clean vẫn khuyến nghị Disable trước, reboot kiểm tra rồi mới gỡ user 0.");
+        }
+
+        if (ReviewExact.Contains(package))
+        {
+            return New(package, path, true, disabled, PackageRisk.Review,
+                "CÓ THỂ DỌN - XEM KỸ",
+                "Có thể không cần nếu bỏ hệ sinh thái Xiaomi, nhưng có thể ảnh hưởng launcher/casting/update/account hoặc phần cứng TV.");
         }
 
         if (lower.StartsWith("com.xiaomi.") || lower.StartsWith("com.mitv.") ||
-            lower.StartsWith("com.duokan.") || lower.StartsWith("com.miui."))
+            lower.StartsWith("com.duokan.") || lower.StartsWith("com.miui.") ||
+            lower.StartsWith("com.mipay."))
         {
             return New(package, path, true, disabled, PackageRisk.Review,
-                "XIAOMI - XEM KỸ", "Package Xiaomi/MIUI chưa đủ dữ liệu để kết luận an toàn.");
+                "XIAOMI - XEM KỸ", "Package Xiaomi/MIUI chưa đủ dữ liệu để tự động chọn dọn.");
         }
 
         return New(package, path, isSystem, disabled, PackageRisk.Review,
