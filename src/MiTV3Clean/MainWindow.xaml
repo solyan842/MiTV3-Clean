@@ -1,8 +1,8 @@
 <Window x:Class="MiTV3Clean.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MiTV3 Clean · SolYan" Height="790" Width="1260"
-        MinHeight="680" MinWidth="1050"
+        Title="MiTV3 Clean · SolYan" Height="820" Width="1260"
+        MinHeight="700" MinWidth="1050"
         Background="#0E0E0E" Foreground="White">
     <Grid Margin="18">
         <Grid.RowDefinitions>
@@ -22,7 +22,7 @@
                 <TextBlock Text="Audit · Debloat · Restore · Couchy Launcher" Foreground="#AAA" FontSize="14"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#1C1C1C" CornerRadius="10" Padding="12,8">
-                <TextBlock Text="v0.1.2 · SolYan" Foreground="#FF9B42"/>
+                <TextBlock Text="v0.1.3 · SolYan" Foreground="#FF9B42"/>
             </Border>
         </Grid>
 
@@ -48,7 +48,7 @@
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="330"/>
             </Grid.ColumnDefinitions>
 
             <DataGrid x:Name="PackageGrid" ItemsSource="{Binding Packages}" AutoGenerateColumns="False"
@@ -84,10 +84,11 @@
                     <StackPanel>
                         <TextBlock Text="COUCHY LAUNCHER" FontWeight="SemiBold" Foreground="#FF9B42"/>
                         <Button Content="Tải + cài Couchy" Click="InstallCouchy_Click"/>
-                        <Button Content="Đặt Couchy làm HOME" Click="SetCouchyHome_Click"/>
+                        <Button Content="Chuyển HOME sang Couchy" Click="SetCouchyHome_Click"/>
+                        <Button Content="Khôi phục HOME Xiaomi" Click="RestoreXiaomiHome_Click"/>
                         <Button Content="Chẩn đoán HOME" Click="DiagnoseHome_Click"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#999" Margin="5"
-                                   Text="v0.1.2 đọc HOME thật bằng KEYCODE_HOME + window/activity focus, phù hợp Android 5.1.1 của MiTV3."/>
+                                   Text="v0.1.3: Android 5.1 dùng legacy switch có rollback. Chỉ disable activity HOME Xiaomi, không disable cả package."/>
                     </StackPanel>
                 </Border>
 
@@ -103,6 +104,6 @@
         </Grid>
 
         <TextBlock Grid.Row="3" Margin="2,12,2,0" Foreground="#777"
-                   Text="MiTV3 Clean · non-root · disable-first · snapshots stored locally · https://github.com/solyan842/MiTV3-Clean"/>
+                   Text="MiTV3 Clean · non-root · disable-first · automatic HOME rollback · https://github.com/solyan842/MiTV3-Clean"/>
     </Grid>
 </Window>
