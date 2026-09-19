@@ -54,11 +54,53 @@ public sealed class CouchyService
         return result;
     }
 
+    public async Task<string> DiagnoseHomeAsync(AdbService adb)
+    {
+        var lines = new List<string>
+        {
+            "=== MiTV3 HOME DIAGNOSTIC ===",
+            "Couchy package: " + await SafeShellAsync(adb, $"pm list packages {Package}"),
+            "Android SDK: " + await SafeShellAsync(adb, "getprop ro.build.version.sdk"),
+            "Android release: " + await SafeShellAsync(adb, "getprop ro.build.version.release"),
+            "Build: " + await SafeShellAsync(adb, "getprop ro.build.display.id"),
+            "cmd binary: " + await SafeShellAsync(adb, "if [ -x /system/bin/cmd ]; then echo present; else echo missing; fi"),
+            "",
+            "HOME resolve:",
+            await ResolveHomeAsync(adb),
+            "",
+            "HOME candidates:"
+        };
+
+        var query = await SafeShellAsync(
+            adb,
+            "pm query-activities -a android.intent.action.MAIN -c android.intent.category.HOME");
+
+        if (LooksLikeShellFailure(query) || string.IsNullOrWhiteSpace(query))
+        {
+            query = await SafeShellAsync(
+                adb,
+                "dumpsys package | grep -i -A 8 -B 2 'android.intent.category.HOME'");
+        }
+        lines.Add(query);
+
+        lines.Add("");
+        lines.Add("Couchy package detail:");
+        lines.Add(await SafeShellAsync(adb, $"dumpsys package {Package}"));
+
+        var text = string.Join("\n", lines);
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MiTV3Clean", "diagnostics");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"home-diagnostic-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+        await File.WriteAllTextAsync(path, text);
+        return text + "\n\nĐã lưu: " + path;
+    }
+
     public async Task<string> SetHomeAsync(AdbService adb)
     {
         var report = new List<string>();
 
-        // Verify Couchy is installed and enabled first.
         var installed = await adb.RunShellAsync($"pm list packages {Package}");
         if (!installed.Contains(Package, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
@@ -72,7 +114,6 @@ public sealed class CouchyService
             report.Add("Không thể gọi pm enable: " + ex.Message);
         }
 
-        // MiTV3 firmwares are often Android 5/6 and may not even include /system/bin/cmd.
         var cmdCheck = await SafeShellAsync(adb, "if [ -x /system/bin/cmd ]; then echo CMD_OK; else echo CMD_MISSING; fi");
         var hasCmd = cmdCheck.Contains("CMD_OK", StringComparison.OrdinalIgnoreCase);
 
@@ -96,10 +137,6 @@ public sealed class CouchyService
             report.Add("Firmware Android cũ: không có /system/bin/cmd.");
         }
 
-        // Old Android fallback:
-        // 1) prove Couchy itself launches;
-        // 2) invoke HOME resolver;
-        // 3) verify what package Android actually resolves as HOME.
         var launch = await SafeShellAsync(adb, $"am start -n {Component}");
         report.Add("Mở Couchy: " + launch);
 
@@ -112,21 +149,17 @@ public sealed class CouchyService
         report.Add("HOME Android đang resolve: " + currentHome);
 
         if (currentHome.Contains(Package, StringComparison.OrdinalIgnoreCase))
-        {
             return "Couchy hiện đã là HOME.\n" + string.Join("\n", report);
-        }
 
         return
             "Couchy đã cài và mở được, nhưng firmware MiTV3 chưa cho đặt HOME tự động.\n" +
-            "Nếu TV hiện hộp chọn launcher, chọn Couchy và chọn Always/Luôn luôn. " +
-            "Nếu không hiện hộp chọn, KHÔNG disable launcher Xiaomi vội; cần xác định package HOME gốc rồi mới chuyển an toàn.\n\n" +
+            "Bấm 'Chẩn đoán HOME' để app tự thu thập launcher hiện tại và toàn bộ HOME candidates. " +
+            "Không disable launcher Xiaomi trước khi biết chính xác package nào đang giữ HOME.\n\n" +
             string.Join("\n", report);
     }
 
     private static async Task<string> ResolveHomeAsync(AdbService adb)
     {
-        // resolve-activity is supported on many older pm builds. If absent,
-        // dumpsys is used only for diagnostics, never as proof of success.
         var pm = await SafeShellAsync(
             adb,
             "pm resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME");
