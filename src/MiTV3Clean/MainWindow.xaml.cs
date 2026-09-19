@@ -147,6 +147,9 @@ public partial class MainWindow : Window
         await GuardAsync(async () => Log(await _couchy.SwitchHomeByUninstallUser0Async(_adb, _progress)));
     }
 
+    private async void EmergencyRecoverHome_Click(object sender, RoutedEventArgs e)
+        => await GuardAsync(async () => Log(await _couchy.EmergencyRecoverXiaomiHomeAsync(_adb, _progress)));
+
     private async void RestoreXiaomiHome_Click(object sender, RoutedEventArgs e)
         => await GuardAsync(async () => Log(await _couchy.RestoreXiaomiHomeAsync(_adb)));
 
