@@ -18,7 +18,8 @@ public static class PackageClassifier
         "com.android.networkstack",
         "com.google.android.webview",
         "com.android.webview",
-        "com.mitv.videoplayer"
+        "com.mitv.videoplayer",
+        "com.mitv.tvhome"
     };
 
     private static readonly string[] ProtectedContains =
@@ -96,7 +97,6 @@ public static class PackageClassifier
         "com.mitv.milinkservice",
         "com.xiaomi.miplay",
         "com.droidlogic",
-        "com.mitv.tvhome",
         "com.mitv.tvhome.michannel",
         "com.mi.umifrontend"
     };
