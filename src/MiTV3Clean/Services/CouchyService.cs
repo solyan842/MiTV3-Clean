@@ -56,20 +56,124 @@ public sealed class CouchyService
 
     public async Task<string> SetHomeAsync(AdbService adb)
     {
-        // Newer Android: direct assignment.
+        var report = new List<string>();
+
+        // Verify Couchy is installed and enabled first.
+        var installed = await adb.RunShellAsync($"pm list packages {Package}");
+        if (!installed.Contains(Package, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
+
         try
         {
-            var output = await adb.RunShellAsync($"cmd package set-home-activity {Component}");
-            if (!output.Contains("Error", StringComparison.OrdinalIgnoreCase) &&
-                !output.Contains("Unknown", StringComparison.OrdinalIgnoreCase))
-                return "Đã yêu cầu Android đặt Couchy làm HOME.\n" + output;
+            await adb.RunShellAsync($"pm enable {Package}");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            report.Add("Không thể gọi pm enable: " + ex.Message);
+        }
 
-        // Android 5/6 fallback: launch Couchy, then HOME. System may show resolver once.
-        await adb.RunShellAsync($"pm enable {Package}");
-        await adb.RunShellAsync($"am start -n {Component}");
-        var fallback = await adb.RunShellAsync("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
-        return "Firmware không hỗ trợ set-home-activity. Đã gọi HOME theo cơ chế Android cũ; nếu TV hiện hộp chọn launcher, chọn Couchy và Always.\n" + fallback;
+        // MiTV3 firmwares are often Android 5/6 and may not even include /system/bin/cmd.
+        var cmdCheck = await SafeShellAsync(adb, "if [ -x /system/bin/cmd ]; then echo CMD_OK; else echo CMD_MISSING; fi");
+        var hasCmd = cmdCheck.Contains("CMD_OK", StringComparison.OrdinalIgnoreCase);
+
+        if (hasCmd)
+        {
+            var output = await SafeShellAsync(adb, $"cmd package set-home-activity {Component}");
+            report.Add("set-home-activity: " + output);
+
+            if (!LooksLikeShellFailure(output))
+            {
+                var resolved = await ResolveHomeAsync(adb);
+                if (resolved.Contains(Package, StringComparison.OrdinalIgnoreCase))
+                {
+                    report.Add("HOME hiện tại: " + resolved);
+                    return "Đã đặt Couchy làm HOME thành công.\n" + string.Join("\n", report);
+                }
+            }
+        }
+        else
+        {
+            report.Add("Firmware Android cũ: không có /system/bin/cmd.");
+        }
+
+        // Old Android fallback:
+        // 1) prove Couchy itself launches;
+        // 2) invoke HOME resolver;
+        // 3) verify what package Android actually resolves as HOME.
+        var launch = await SafeShellAsync(adb, $"am start -n {Component}");
+        report.Add("Mở Couchy: " + launch);
+
+        var homeCall = await SafeShellAsync(
+            adb,
+            "am start -a android.intent.action.MAIN -c android.intent.category.HOME");
+        report.Add("Gọi HOME: " + homeCall);
+
+        var currentHome = await ResolveHomeAsync(adb);
+        report.Add("HOME Android đang resolve: " + currentHome);
+
+        if (currentHome.Contains(Package, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Couchy hiện đã là HOME.\n" + string.Join("\n", report);
+        }
+
+        return
+            "Couchy đã cài và mở được, nhưng firmware MiTV3 chưa cho đặt HOME tự động.\n" +
+            "Nếu TV hiện hộp chọn launcher, chọn Couchy và chọn Always/Luôn luôn. " +
+            "Nếu không hiện hộp chọn, KHÔNG disable launcher Xiaomi vội; cần xác định package HOME gốc rồi mới chuyển an toàn.\n\n" +
+            string.Join("\n", report);
+    }
+
+    private static async Task<string> ResolveHomeAsync(AdbService adb)
+    {
+        // resolve-activity is supported on many older pm builds. If absent,
+        // dumpsys is used only for diagnostics, never as proof of success.
+        var pm = await SafeShellAsync(
+            adb,
+            "pm resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME");
+
+        if (!LooksLikeShellFailure(pm) && !string.IsNullOrWhiteSpace(pm))
+            return pm.Trim();
+
+        var dump = await SafeShellAsync(adb, "dumpsys package preferred-activities");
+        if (!string.IsNullOrWhiteSpace(dump))
+        {
+            var lines = dump.Split('\n')
+                .Select(x => x.Trim())
+                .Where(x => x.Contains("HOME", StringComparison.OrdinalIgnoreCase) ||
+                            x.Contains("couchytv", StringComparison.OrdinalIgnoreCase) ||
+                            x.Contains("launcher", StringComparison.OrdinalIgnoreCase) ||
+                            x.Contains("tvhome", StringComparison.OrdinalIgnoreCase))
+                .Take(20);
+            var summary = string.Join(" | ", lines);
+            if (!string.IsNullOrWhiteSpace(summary))
+                return summary;
+        }
+
+        return "Không xác định được bằng shell của firmware này.";
+    }
+
+    private static async Task<string> SafeShellAsync(AdbService adb, string command)
+    {
+        try
+        {
+            return (await adb.RunShellAsync(command)).Trim();
+        }
+        catch (Exception ex)
+        {
+            return ex.Message.Trim();
+        }
+    }
+
+    private static bool LooksLikeShellFailure(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return false;
+
+        var s = output.ToLowerInvariant();
+        return s.Contains("not found") ||
+               s.Contains("unknown command") ||
+               s.Contains("unknown option") ||
+               s.Contains("error:") ||
+               s.Contains("exception") ||
+               s.Contains("failure");
     }
 }
