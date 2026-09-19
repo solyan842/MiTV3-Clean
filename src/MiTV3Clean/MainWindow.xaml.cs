@@ -131,6 +131,20 @@ public partial class MainWindow : Window
     private async void DiagnoseHome_Click(object sender, RoutedEventArgs e)
         => await GuardAsync(async () => Log(await _couchy.DiagnoseHomeAsync(_adb)));
 
+    private async void ForceSwitchHome_Click(object sender, RoutedEventArgs e)
+    {
+        var answer = MessageBox.Show(
+            "Chế độ này sẽ backup APK com.mitv.tvhome về PC trước, sau đó thử pm uninstall --user 0 để nhường HOME cho Couchy.\n\n" +
+            "Nếu Couchy không nhận HOME, app sẽ tự cài lại TVHome từ file backup. Chỉ tiếp tục khi ADB đang ổn định và KHÔNG tắt TV giữa chừng.",
+            "MiTV3 Clean · Chuyển HOME mạnh",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (answer != MessageBoxResult.Yes) return;
+
+        await GuardAsync(async () => Log(await _couchy.SwitchHomeByUninstallUser0Async(_adb, _progress)));
+    }
+
     private async void RestoreXiaomiHome_Click(object sender, RoutedEventArgs e)
         => await GuardAsync(async () => Log(await _couchy.RestoreXiaomiHomeAsync(_adb)));
 
