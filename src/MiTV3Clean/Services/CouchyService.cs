@@ -14,7 +14,7 @@ public sealed class CouchyService
     {
         progress?.Report("Đang tìm bản Couchy Launcher mới nhất...");
         using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.6");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.7");
 
         var json = await http.GetStringAsync("https://api.github.com/repos/conreo/couchy-launcher/releases/latest");
         using var doc = JsonDocument.Parse(json);
@@ -78,7 +78,7 @@ public sealed class CouchyService
 
         var lines = new List<string>
         {
-            "=== MiTV3 HOME DIAGNOSTIC v0.1.6 ===",
+            "=== MiTV3 HOME DIAGNOSTIC v0.1.7 ===",
             "Couchy package: " + await SafeShellAsync(adb, $"pm list packages {Package}"),
             "Android SDK: " + await SafeShellAsync(adb, "getprop ro.build.version.sdk"),
             "Android release: " + await SafeShellAsync(adb, "getprop ro.build.version.release"),
@@ -348,6 +348,54 @@ public sealed class CouchyService
 
         return "CẢNH BÁO: uninstall user 0 đã chạy nhưng rollback tự động chưa xác nhận TVHome trở lại.\n" +
                "KHÔNG reboot TV. Giữ ADB kết nối và dùng file backup sau để phục hồi thủ công:\n" + backupApk + "\n" +
+               string.Join("\n", report);
+    }
+
+    public async Task<string> EmergencyRecoverXiaomiHomeAsync(AdbService adb, IProgress<string>? progress = null)
+    {
+        var report = new List<string>();
+
+        var backupDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MiTV3Clean", "backup");
+
+        var latestBackup = Directory.Exists(backupDir)
+            ? Directory.GetFiles(backupDir, "com.mitv.tvhome-*.apk")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault()
+            : null;
+
+        var path = await SafeShellAsync(adb, $"pm path {XiaomiHomePackage}");
+        report.Add("pm path TVHome: " + (string.IsNullOrWhiteSpace(path) ? "(rỗng)" : path));
+
+        var installExisting = await SafeShellAsync(adb, $"pm install-existing --user 0 {XiaomiHomePackage}");
+        report.Add("pm install-existing: " + installExisting);
+
+        if (latestBackup is not null)
+        {
+            progress?.Report("Đang phục hồi TVHome từ APK backup trên PC...");
+            var reinstall = await adb.RunDeviceAsync($"install -r -d \"{latestBackup}\"");
+            report.Add("adb install backup: " + reinstall);
+            report.Add("Backup dùng để phục hồi: " + latestBackup);
+        }
+        else
+        {
+            report.Add("Không tìm thấy APK backup TVHome trên PC.");
+        }
+
+        var start = await SafeShellAsync(adb, $"am start -W -n {XiaomiHomeComponent}");
+        report.Add("Mở Xiaomi HOME trực tiếp: " + start);
+
+        await SafeShellAsync(adb, "input keyevent 3");
+        await Task.Delay(1200);
+
+        var actual = await DetectCurrentHomeComponentAsync(adb);
+        report.Add("HOME thực tế sau phục hồi: " + actual);
+
+        if (actual.StartsWith(XiaomiHomePackage + "/", StringComparison.OrdinalIgnoreCase))
+            return "PHỤC HỒI HOME XIAOMI THÀNH CÔNG.\n" + string.Join("\n", report);
+
+        return "CHƯA XÁC NHẬN PHỤC HỒI XONG. KHÔNG REBOOT TV. Giữ ADB kết nối và gửi log này.\n" +
                string.Join("\n", report);
     }
 
