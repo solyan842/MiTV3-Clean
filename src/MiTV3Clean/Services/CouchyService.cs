@@ -14,7 +14,7 @@ public sealed class CouchyService
     {
         progress?.Report("Đang tìm bản Couchy Launcher mới nhất...");
         using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.4");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.6");
 
         var json = await http.GetStringAsync("https://api.github.com/repos/conreo/couchy-launcher/releases/latest");
         using var doc = JsonDocument.Parse(json);
@@ -78,7 +78,7 @@ public sealed class CouchyService
 
         var lines = new List<string>
         {
-            "=== MiTV3 HOME DIAGNOSTIC v0.1.4 ===",
+            "=== MiTV3 HOME DIAGNOSTIC v0.1.6 ===",
             "Couchy package: " + await SafeShellAsync(adb, $"pm list packages {Package}"),
             "Android SDK: " + await SafeShellAsync(adb, "getprop ro.build.version.sdk"),
             "Android release: " + await SafeShellAsync(adb, "getprop ro.build.version.release"),
@@ -141,9 +141,10 @@ public sealed class CouchyService
     {
         var report = new List<string>();
 
-        var installed = await SafeShellAsync(adb, $"pm list packages {Package}");
-        if (!installed.Contains(Package, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
+        var couchyStatus = await GetPackageInstallStatusAsync(adb, Package);
+        report.Add("Trạng thái Couchy: " + couchyStatus.Detail);
+        if (!couchyStatus.Installed)
+            throw new InvalidOperationException("Không xác nhận được Couchy Launcher trên TV.\n" + couchyStatus.Detail);
 
         // Verify Couchy really advertises a HOME activity before touching preferences.
         var explicitHome = await SafeShellAsync(
@@ -241,9 +242,10 @@ public sealed class CouchyService
     {
         var report = new List<string>();
 
-        var couchyInstalled = await SafeShellAsync(adb, $"pm list packages {Package}");
-        if (!couchyInstalled.Contains(Package, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
+        var couchyStatus = await GetPackageInstallStatusAsync(adb, Package);
+        report.Add("Trạng thái Couchy: " + couchyStatus.Detail);
+        if (!couchyStatus.Installed)
+            throw new InvalidOperationException("Không xác nhận được Couchy Launcher trên TV.\n" + couchyStatus.Detail);
 
         var explicitHome = await SafeShellAsync(
             adb,
