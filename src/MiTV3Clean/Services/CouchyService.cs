@@ -14,7 +14,7 @@ public sealed class CouchyService
     {
         progress?.Report("Đang tìm bản Couchy Launcher mới nhất...");
         using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.3");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("MiTV3Clean/0.1.4");
 
         var json = await http.GetStringAsync("https://api.github.com/repos/conreo/couchy-launcher/releases/latest");
         using var doc = JsonDocument.Parse(json);
@@ -78,7 +78,7 @@ public sealed class CouchyService
 
         var lines = new List<string>
         {
-            "=== MiTV3 HOME DIAGNOSTIC v0.1.3 ===",
+            "=== MiTV3 HOME DIAGNOSTIC v0.1.4 ===",
             "Couchy package: " + await SafeShellAsync(adb, $"pm list packages {Package}"),
             "Android SDK: " + await SafeShellAsync(adb, "getprop ro.build.version.sdk"),
             "Android release: " + await SafeShellAsync(adb, "getprop ro.build.version.release"),
@@ -145,8 +145,7 @@ public sealed class CouchyService
         if (!installed.Contains(Package, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Couchy Launcher chưa được cài trên TV.");
 
-        await SafeShellAsync(adb, $"pm enable {Package}");
-
+        // Verify Couchy really advertises a HOME activity before touching preferences.
         var explicitHome = await SafeShellAsync(
             adb,
             $"am start -W -a android.intent.action.MAIN -c android.intent.category.HOME -p {Package}");
@@ -170,42 +169,71 @@ public sealed class CouchyService
 
         if (!before.StartsWith(XiaomiHomePackage + "/", StringComparison.OrdinalIgnoreCase))
         {
-            return "DỪNG AN TOÀN: HOME hiện tại không phải launcher Xiaomi đã xác nhận. Không disable component nào.\n" +
+            return "DỪNG AN TOÀN: HOME hiện tại không phải launcher Xiaomi đã xác nhận. Không thay đổi preferred HOME.\n" +
                    string.Join("\n", report);
         }
 
-        // Disable ONLY the currently focused Xiaomi HOME activity, never the whole package.
-        var disable = await SafeShellAsync(adb, $"pm disable-user --user 0 {before}");
-        report.Add("Disable activity HOME Xiaomi: " + disable);
+        // IMPORTANT: do not pm disable/disable-user Xiaomi HOME here.
+        // MiTV3 runs the Xiaomi launcher as uid 1000 while adb shell is uid 2000,
+        // so changing the system component state is rejected with SecurityException.
+        report.Add("Không disable Xiaomi HOME: firmware chặn shell UID 2000 đổi component hệ thống UID 1000.");
 
-        if (LooksLikeShellFailure(disable))
+        // On legacy Android, the safe non-root path is to clear preferred HOME
+        // associations and ask PackageManager to resolve a generic HOME intent.
+        // This may present the launcher chooser on the TV, where the user selects
+        // Couchy and confirms Always/Luôn luôn once.
+        var clearXiaomi = await SafeShellAsync(
+            adb,
+            $"pm clear-package-preferred-activities {XiaomiHomePackage}");
+        report.Add("Clear preferred Xiaomi HOME: " + clearXiaomi);
+
+        var clearCouchy = await SafeShellAsync(
+            adb,
+            $"pm clear-package-preferred-activities {Package}");
+        report.Add("Clear preferred Couchy HOME: " + clearCouchy);
+
+        var clearFailed = LooksLikeShellFailure(clearXiaomi) && LooksLikeShellFailure(clearCouchy);
+        if (clearFailed)
         {
-            await SafeShellAsync(adb, $"pm enable {before}");
-            return "Không disable được activity HOME Xiaomi; đã yêu cầu enable lại để đảm bảo an toàn.\n" +
+            // We still launch Couchy explicitly so the launcher itself is usable,
+            // but we do not claim that the HOME default was changed.
+            var launch = await SafeShellAsync(adb, $"am start -W -n {Component}");
+            report.Add("Mở Couchy trực tiếp: " + launch);
+
+            return "Firmware không cho ADB thay preferred HOME. Couchy đã được mở nhưng chưa thể đặt mặc định tự động.\n" +
+                   "Không cần root và không disable launcher Xiaomi. Nếu TV có mục chọn launcher mặc định, hãy chọn Couchy tại đó.\n" +
                    string.Join("\n", report);
         }
 
-        await SafeShellAsync(adb, "input keyevent 3");
-        await Task.Delay(1200);
-        var after = await DetectCurrentHomeComponentAsync(adb);
-        report.Add("HOME sau khi chuyển: " + after);
+        var resolver = await SafeShellAsync(
+            adb,
+            "am start -W -a android.intent.action.MAIN -c android.intent.category.HOME");
+        report.Add("Mở HOME chooser: " + resolver);
 
-        if (after.Contains(Package, StringComparison.OrdinalIgnoreCase))
+        await Task.Delay(900);
+        var chooserFocus = await DetectCurrentHomeComponentAsync(adb);
+        report.Add("Focus sau khi gọi HOME chooser: " + chooserFocus);
+
+        if (chooserFocus.Contains(Package, StringComparison.OrdinalIgnoreCase))
         {
-            return "CHUYỂN HOME LEGACY THÀNH CÔNG: Couchy đang nhận phím HOME.\n" +
-                   "Chỉ activity HOME của Xiaomi bị disable; package com.mitv.tvhome vẫn còn nguyên để giảm rủi ro.\n" +
+            return "CHUYỂN HOME THÀNH CÔNG: Couchy đang nhận phím HOME.\n" +
                    string.Join("\n", report);
         }
 
-        // Automatic rollback.
-        var rollback = await SafeShellAsync(adb, $"pm enable {before}");
-        report.Add("ROLLBACK enable Xiaomi HOME: " + rollback);
-        await SafeShellAsync(adb, "input keyevent 3");
-        await Task.Delay(800);
-        var restored = await DetectCurrentHomeComponentAsync(adb);
-        report.Add("HOME sau rollback: " + restored);
+        if (LooksLikeResolver(chooserFocus) || !chooserFocus.StartsWith(XiaomiHomePackage + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ĐÃ MỞ BỘ CHỌN HOME TRÊN TV. Hãy chọn Couchy Launcher và chọn Always/Luôn luôn một lần.\n" +
+                   "App không disable launcher Xiaomi và không cần root.\n" +
+                   string.Join("\n", report);
+        }
 
-        return "CHUYỂN HOME KHÔNG THÀNH CÔNG - ĐÃ ROLLBACK TỰ ĐỘNG. Launcher Xiaomi đã được bật lại.\n" +
+        // Some Xiaomi builds immediately restore their own HOME even after preferred
+        // activities are cleared. In that case we stop here instead of escalating.
+        var launchCouchy = await SafeShellAsync(adb, $"am start -W -n {Component}");
+        report.Add("Fallback mở Couchy trực tiếp: " + launchCouchy);
+
+        return "Firmware Xiaomi đã tự nhận lại HOME sau khi clear preferred. Couchy vẫn mở được trực tiếp, nhưng ADB shell không có quyền ép launcher mặc định trên firmware này.\n" +
+               "Không thực hiện disable package/component để tránh SecurityException hoặc boot-loop.\n" +
                string.Join("\n", report);
     }
 
@@ -306,6 +334,17 @@ public sealed class CouchyService
         {
             return ex.Message.Trim();
         }
+    }
+
+    private static bool LooksLikeResolver(string component)
+    {
+        if (string.IsNullOrWhiteSpace(component)) return false;
+
+        var s = component.ToLowerInvariant();
+        return s.Contains("resolveractivity") ||
+               s.Contains("chooseractivity") ||
+               s.Contains("android/com.android.internal.app") ||
+               s.Contains("com.android.settings");
     }
 
     private static bool LooksLikeShellFailure(string output)
