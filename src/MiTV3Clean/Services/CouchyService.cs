@@ -418,6 +418,32 @@ public sealed class CouchyService
         return "Đã yêu cầu khôi phục launcher Xiaomi.\n" + string.Join("\n", report);
     }
 
+    private static async Task<(bool Installed, string Detail)> GetPackageInstallStatusAsync(AdbService adb, string packageName)
+    {
+        var path = await SafeShellAsync(adb, $"pm path {packageName}");
+        if (path.Contains("package:", StringComparison.OrdinalIgnoreCase))
+            return (true, "pm path -> " + path.Replace("\n", " | "));
+
+        var listAll = await SafeShellAsync(adb, "pm list packages");
+        if (listAll.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                   .Any(x => x.Trim().Equals("package:" + packageName, StringComparison.OrdinalIgnoreCase)))
+            return (true, "pm list packages -> package:" + packageName);
+
+        var dump = await SafeShellAsync(adb, $"dumpsys package {packageName}");
+        if (dump.Contains($"Package [{packageName}]", StringComparison.OrdinalIgnoreCase) ||
+            (dump.Contains("Package{", StringComparison.OrdinalIgnoreCase) &&
+             dump.Contains(packageName, StringComparison.OrdinalIgnoreCase)))
+            return (true, "dumpsys package -> tìm thấy " + packageName);
+
+        var dumpPreview = string.IsNullOrWhiteSpace(dump)
+            ? "(rỗng)"
+            : dump[..Math.Min(dump.Length, 180)].Replace("\n", " ");
+
+        return (false,
+            "pm path: " + (string.IsNullOrWhiteSpace(path) ? "(rỗng)" : path) +
+            " | dumpsys: " + dumpPreview);
+    }
+
     private static async Task<string> DetectCurrentHomeComponentAsync(AdbService adb)
     {
         var windowDump = await SafeShellAsync(adb, "dumpsys window windows");
